@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,15 +13,29 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
 
   final employeeCodeController = TextEditingController();
   final fullNameController = TextEditingController();
-  final emailController = TextEditingController();
-  final positionController = TextEditingController();
+  final phoneController = TextEditingController();
 
   final SupabaseClient supabase = Supabase.instance.client;
 
   bool isLoading = false;
   int? selectedDepartmentId;
+  String? selectedPosition;
 
   List<Map<String, dynamic>> departments = [];
+
+  final List<String> positions = [
+    'ช่าง (Mechanic / Technician)',
+    'รถเช่า (Car Rental Staff / Rental Agent)',
+    'ศูนย์ซ่อมตัวถังและสี (Body & Paint Center)',
+    'เจ้าหน้าที่ธุรการ (Administrative Officer)',
+    'เจ้าหน้าที่ลูกค้าสัมพันธ์ (Customer Relations Officer)',
+    'เซลล์ (Sales Representative)',
+    'เอสเอ (Service Advisor)',
+    'วารันตี (Warranty Officer)',
+    'ที่ปรึกษาด้านการขาย (Sales Consultant)',
+    'เจ้าหน้าที่อะไหล่ (Parts Specialist)',
+    'แคชเชียร์ (Cashier)',
+  ];
 
   @override
   void initState() {
@@ -34,8 +47,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
   void dispose() {
     employeeCodeController.dispose();
     fullNameController.dispose();
-    emailController.dispose();
-    positionController.dispose();
+    phoneController.dispose();
     super.dispose();
   }
 
@@ -43,7 +55,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
     try {
       final result = await supabase
           .from('departments')
-          .select('id, name')
+          .select('id, department_name')
           .order('id');
 
       if (!mounted) return;
@@ -68,8 +80,8 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
         body: {
           'employee_code': employeeCodeController.text.trim(),
           'full_name': fullNameController.text.trim(),
-          'email': emailController.text.trim(),
-          'position': positionController.text.trim(),
+          'phone': phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), ''),
+          'position': selectedPosition,
           'department_id': selectedDepartmentId,
         },
       );
@@ -211,32 +223,55 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                       const SizedBox(height: 18),
 
                       TextFormField(
-                        controller: emailController,
-                        keyboardType: TextInputType.emailAddress,
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
                         decoration: _decoration(
-                          'อีเมล',
-                          Icons.email_outlined,
+                          'เบอร์โทรศัพท์',
+                          Icons.phone_outlined,
                         ),
                         validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'กรุณากรอกอีเมล';
+                          final phone = (value ?? '').trim();
+                          if (phone.isEmpty) {
+                            return 'กรุณากรอกเบอร์โทรศัพท์';
                           }
-                          if (!RegExp(
-                            r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                          ).hasMatch(value.trim())) {
-                            return 'รูปแบบอีเมลไม่ถูกต้อง';
+                          final normalized =
+                              phone.replaceAll(RegExp(r'[\s-]'), '');
+                          if (!RegExp(r'^0[0-9]{9}$').hasMatch(normalized)) {
+                            return 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก';
                           }
                           return null;
                         },
                       ),
                       const SizedBox(height: 18),
 
-                      TextFormField(
-                        controller: positionController,
+                      DropdownButtonFormField<String>(
+                        value: selectedPosition,
+                        isExpanded: true,
                         decoration: _decoration(
                           'ตำแหน่ง',
                           Icons.work_outline,
                         ),
+                        hint: const Text('เลือกตำแหน่ง'),
+                        items: positions.map((position) {
+                          return DropdownMenuItem<String>(
+                            value: position,
+                            child: Text(
+                              position,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            selectedPosition = value;
+                          });
+                        },
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'กรุณาเลือกตำแหน่ง';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 18),
 
@@ -251,7 +286,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                           return DropdownMenuItem<int>(
                             value: (department['id'] as num).toInt(),
                             child: Text(
-                              department['name']?.toString() ?? '',
+                              department['department_name']?.toString() ?? '',
                             ),
                           );
                         }).toList(),
@@ -312,7 +347,9 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
                                 )
                               : const Icon(Icons.save_outlined),
                           label: Text(
-                            isLoading ? 'กำลังบันทึก...' : 'บันทึกข้อมูลพนักงาน',
+                            isLoading
+                                ? 'กำลังบันทึก...'
+                                : 'บันทึกข้อมูลพนักงาน',
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,

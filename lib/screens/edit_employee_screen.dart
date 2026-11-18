@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -21,7 +20,7 @@ class _EditEmployeeScreenState extends State<EditEmployeeScreen> {
 
   late final TextEditingController codeController;
   late final TextEditingController nameController;
-  late final TextEditingController emailController;
+  late final TextEditingController phoneController;
   late final TextEditingController positionController;
   late final TextEditingController departmentController;
 
@@ -47,8 +46,8 @@ class _EditEmployeeScreenState extends State<EditEmployeeScreen> {
       text: employee['full_name']?.toString() ?? '',
     );
 
-    emailController = TextEditingController(
-      text: employee['email']?.toString() ?? '',
+    phoneController = TextEditingController(
+      text: employee['phone']?.toString() ?? '',
     );
 
     positionController = TextEditingController(
@@ -69,7 +68,7 @@ class _EditEmployeeScreenState extends State<EditEmployeeScreen> {
   void dispose() {
     codeController.dispose();
     nameController.dispose();
-    emailController.dispose();
+    phoneController.dispose();
     positionController.dispose();
     departmentController.dispose();
     super.dispose();
@@ -192,13 +191,18 @@ class _EditEmployeeScreenState extends State<EditEmployeeScreen> {
         departmentController.text,
       );
 
+      final normalizedPhone = phoneController.text
+          .trim()
+          .replaceAll(RegExp(r'[\s-]'), '');
+
       // บันทึกข้อมูลพนักงาน
+      // ไม่แก้ไข email เพราะเป็นอีเมลภายในที่ใช้สำหรับเข้าสู่ระบบ
       await supabase
           .from('profiles')
           .update({
             'employee_code': codeController.text.trim(),
             'full_name': nameController.text.trim(),
-            'email': emailController.text.trim(),
+            'phone': normalizedPhone,
             'position': positionController.text.trim().isEmpty
                 ? null
                 : positionController.text.trim(),
@@ -351,16 +355,23 @@ class _EditEmployeeScreenState extends State<EditEmployeeScreen> {
                   ),
 
                   buildTextField(
-                    label: 'อีเมล',
-                    controller: emailController,
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
+                    label: 'เบอร์โทรศัพท์',
+                    controller: phoneController,
+                    icon: Icons.phone_outlined,
+                    keyboardType: TextInputType.phone,
                     validator: (value) {
-                      if (value == null ||
-                          !RegExp(r'^[^@]+@[^@]+\.[^@]+$')
-                              .hasMatch(value.trim())) {
-                        return 'กรุณากรอกอีเมลให้ถูกต้อง';
+                      final phone = (value ?? '')
+                          .trim()
+                          .replaceAll(RegExp(r'[\s-]'), '');
+
+                      if (phone.isEmpty) {
+                        return 'กรุณากรอกเบอร์โทรศัพท์';
                       }
+
+                      if (!RegExp(r'^0[0-9]{9}$').hasMatch(phone)) {
+                        return 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก';
+                      }
+
                       return null;
                     },
                   ),

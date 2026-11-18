@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -51,7 +50,7 @@ class _EmployeeManagementScreenState
       final employeeData = await supabase
           .from('profiles')
           .select(
-            'id, employee_code, full_name, email, position, role, department_id, is_active',
+            'id, employee_code, full_name, phone, position, role, department_id, is_active',
           )
           .order('full_name');
 
@@ -83,7 +82,7 @@ class _EmployeeManagementScreenState
     }
   }
 
-  // ค้นหาพนักงาน
+  // ค้นหาพนักงานด้วยชื่อ รหัสพนักงาน หรือเบอร์โทรศัพท์
   void filterEmployees() {
     final keyword = searchText.toLowerCase().trim();
 
@@ -94,12 +93,12 @@ class _EmployeeManagementScreenState
       final code =
           (employee['employee_code'] ?? '').toString().toLowerCase();
 
-      final email =
-          (employee['email'] ?? '').toString().toLowerCase();
+      final phone =
+          (employee['phone'] ?? '').toString().toLowerCase();
 
       return name.contains(keyword) ||
           code.contains(keyword) ||
-          email.contains(keyword);
+          phone.contains(keyword);
     }).toList();
 
     if (mounted) {
@@ -392,7 +391,7 @@ class _EmployeeManagementScreenState
                 filterEmployees();
               },
               decoration: InputDecoration(
-                hintText: 'ค้นหาชื่อ รหัสพนักงาน หรืออีเมล',
+                hintText: 'ค้นหาชื่อ รหัสพนักงาน หรือเบอร์โทรศัพท์',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: searchController.text.isNotEmpty
                     ? IconButton(
@@ -473,8 +472,9 @@ class _EmployeeManagementScreenState
                                 (employee['employee_code'] ?? '-')
                                     .toString();
 
-                            final email =
-                                (employee['email'] ?? '-').toString();
+                            final phone =
+                                (employee['phone'] ?? 'ยังไม่ได้ระบุเบอร์โทรศัพท์')
+                                    .toString();
 
                             final position =
                                 (employee['position'] ?? 'ไม่ระบุตำแหน่ง')
@@ -546,7 +546,7 @@ class _EmployeeManagementScreenState
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            email,
+                                            'เบอร์โทรศัพท์: $phone',
                                             style: const TextStyle(
                                               fontSize: 12,
                                               color: Colors.black54,
