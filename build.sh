@@ -12,6 +12,9 @@ tar -xf /tmp/flutter.tar.xz -C /tmp
 
 export PATH="/tmp/flutter/bin:$PATH"
 
+# Fix Git dubious ownership
+git config --global --add safe.directory /tmp/flutter
+
 echo "Flutter version:"
 flutter --version
 
