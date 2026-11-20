@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,7 +15,6 @@ class LandingScreen extends StatefulWidget {
 
 class _LandingScreenState extends State<LandingScreen> {
   final supabase = Supabase.instance.client;
-
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _calendarKey = GlobalKey();
 
@@ -38,10 +36,15 @@ class _LandingScreenState extends State<LandingScreen> {
 
   Map<String, int> calendarData = {};
 
-  // ข้อมูลตาราง OT
+  // ข้อมูล OT
   bool overtimeLoading = true;
   String? overtimeError;
   List<Map<String, dynamic>> overtimeSchedules = [];
+
+  // รายการลาอนุมัติ
+  bool approvedLeaveLoading = true;
+  String? approvedLeaveError;
+  List<Map<String, dynamic>> approvedLeaveSchedules = [];
 
   DateTime selectedMonth = DateTime.now();
   DateTime selectedCalendarDate = DateTime.now();
@@ -72,6 +75,7 @@ class _LandingScreenState extends State<LandingScreen> {
     loadUser();
     loadPublicData();
     loadOvertimeSchedules();
+    loadApprovedLeaveSchedules();
 
     authSubscription = supabase.auth.onAuthStateChange.listen((data) {
       loadUser();
@@ -99,7 +103,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // โหลดข้อมูลผู้ใช้งานและรูปโปรไฟล์
+  // โหลดข้อมูลผู้ใช้งาน
   Future<void> loadUser() async {
     final user = supabase.auth.currentUser;
 
@@ -150,7 +154,7 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  // โหลดข้อมูลภาพรวมและปฏิทินการลา
+  // โหลดข้อมูลภาพรวมและปฏิทิน
   Future<void> loadPublicData() async {
     if (!mounted) return;
 
@@ -235,7 +239,7 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  // โหลดรายการ OT ที่อนุมัติแล้ว พร้อมรูปโปรไฟล์
+  // โหลดรายการ OT ที่อนุมัติแล้ว
   Future<void> loadOvertimeSchedules() async {
     if (!mounted) return;
 
@@ -271,11 +275,45 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
-  // รีเฟรชข้อมูลทั้งหมดหน้า Landing
+  // โหลดรายการลาอนุมัติจาก public_approved_leaves
+  Future<void> loadApprovedLeaveSchedules() async {
+    if (!mounted) return;
+
+    setState(() {
+      approvedLeaveLoading = true;
+      approvedLeaveError = null;
+    });
+
+    try {
+      final response = await supabase
+          .from('public_approved_leaves')
+          .select('id, full_name, start_date, end_date, leave_name')
+          .order('start_date', ascending: true);
+
+      final result = List<Map<String, dynamic>>.from(response);
+
+      if (!mounted) return;
+
+      setState(() {
+        approvedLeaveSchedules = result;
+        approvedLeaveLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        approvedLeaveLoading = false;
+        approvedLeaveError = e.toString();
+      });
+    }
+  }
+
+  // รีเฟรชข้อมูลทั้งหมด
   Future<void> refreshLanding() async {
     await Future.wait([
       loadPublicData(),
       loadOvertimeSchedules(),
+      loadApprovedLeaveSchedules(),
     ]);
   }
 
@@ -352,7 +390,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // เปลี่ยนเดือนปฏิทิน
+  // เปลี่ยนเดือน
   void changeMonth(int amount) {
     setState(() {
       selectedMonth = DateTime(
@@ -376,24 +414,13 @@ class _LandingScreenState extends State<LandingScreen> {
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
-              SliverToBoxAdapter(
-                child: _buildHeader(),
-              ),
-              SliverToBoxAdapter(
-                child: _buildHero(),
-              ),
-              SliverToBoxAdapter(
-                child: _buildOverview(),
-              ),
-              SliverToBoxAdapter(
-                child: _buildOvertimeSchedule(),
-              ),
-              SliverToBoxAdapter(
-                child: _buildCalendar(),
-              ),
-              SliverToBoxAdapter(
-                child: _buildFooter(),
-              ),
+              SliverToBoxAdapter(child: _buildHeader()),
+              SliverToBoxAdapter(child: _buildHero()),
+              SliverToBoxAdapter(child: _buildOverview()),
+              SliverToBoxAdapter(child: _buildApprovedLeaveSection()),
+              SliverToBoxAdapter(child: _buildOvertimeSchedule()),
+              SliverToBoxAdapter(child: _buildCalendar()),
+              SliverToBoxAdapter(child: _buildFooter()),
             ],
           ),
         ),
@@ -516,9 +543,7 @@ class _LandingScreenState extends State<LandingScreen> {
                         ),
                         const SizedBox(width: 8),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: 130,
-                          ),
+                          constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
                             fullName,
                             overflow: TextOverflow.ellipsis,
@@ -832,7 +857,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // ข้อผิดพลาดข้อมูลภาพรวม
+  // Error ภาพรวม
   Widget _buildDataError() {
     return Container(
       width: double.infinity,
@@ -867,7 +892,297 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // ตารางผู้ปฏิบัติงาน OT
+  // รายการลาอนุมัติแล้ว
+  Widget _buildApprovedLeaveSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 35, 20, 10),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFE8EEF5),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.025),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.event_available,
+                        color: Colors.green,
+                        size: 27,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'รายการลาที่อนุมัติแล้ว',
+                            style: TextStyle(
+                              color: dark,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'แสดงรายการวันลาและประเภทการลา',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'รีเฟรชรายการลา',
+                      onPressed: approvedLeaveLoading
+                          ? null
+                          : loadApprovedLeaveSchedules,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                if (approvedLeaveLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(25),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (approvedLeaveError != null)
+                  _buildApprovedLeaveError()
+                else if (approvedLeaveSchedules.isEmpty)
+                  _buildEmptyApprovedLeave()
+                else
+                  Column(
+                    children: approvedLeaveSchedules
+                        .map((item) => _buildApprovedLeaveCard(item))
+                        .toList(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // การ์ดรายการลา
+  Widget _buildApprovedLeaveCard(Map<String, dynamic> item) {
+    final employeeName =
+        item['full_name']?.toString() ?? 'ไม่ระบุชื่อ';
+
+    final leaveName =
+        item['leave_name']?.toString() ?? 'ไม่ระบุประเภทการลา';
+
+    final startDate = formatDate(item['start_date']);
+    final endDate = formatDate(item['end_date']);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFE6EDF5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 23,
+                backgroundColor: Colors.green.withValues(alpha: 0.12),
+                child: const Icon(
+                  Icons.person_outline,
+                  color: Colors.green,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  employeeName,
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'อนุมัติแล้ว',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              const Icon(
+                Icons.category_outlined,
+                color: primary,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  leaveName,
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.date_range,
+                color: Colors.orange,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  startDate == endDate
+                      ? startDate
+                      : '$startDate - $endDate',
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ไม่มีรายการลา
+  Widget _buildEmptyApprovedLeave() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.event_busy,
+            color: Colors.grey,
+            size: 40,
+          ),
+          SizedBox(height: 10),
+          Text(
+            'ยังไม่มีรายการลาที่อนุมัติ',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Error รายการลา
+  Widget _buildApprovedLeaveError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: Colors.red,
+            size: 35,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'ไม่สามารถโหลดรายการลาได้',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            approvedLeaveError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: loadApprovedLeaveSchedules,
+            icon: const Icon(Icons.refresh),
+            label: const Text('ลองอีกครั้ง'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ตาราง OT
   Widget _buildOvertimeSchedule() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 35, 20, 10),
@@ -968,7 +1283,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
-  // การ์ด OT แต่ละรายการ พร้อมรูปโปรไฟล์
+  // การ์ด OT
   Widget _buildOvertimeCard(Map<String, dynamic> item) {
     final avatarUrl = item['avatar_url']?.toString() ?? '';
     final employeeName =
@@ -1027,8 +1342,6 @@ class _LandingScreenState extends State<LandingScreen> {
             ],
           ),
           const SizedBox(height: 15),
-
-          // รูปโปรไฟล์และชื่อพนักงาน
           Row(
             children: [
               CircleAvatar(
@@ -1058,7 +1371,6 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 12),
           Row(
             children: [
@@ -1333,10 +1645,12 @@ class _LandingScreenState extends State<LandingScreen> {
                   child: TextButton.icon(
                     onPressed: () {
                       final now = DateTime.now();
+
                       setState(() {
                         selectedMonth = DateTime(now.year, now.month, 1);
                         selectedCalendarDate = now;
                       });
+
                       loadPublicData();
                     },
                     icon: const Icon(Icons.today_rounded, size: 18),
@@ -1474,6 +1788,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // Legend ปฏิทิน
   Widget _calendarLegend({
     required Color color,
     required String label,

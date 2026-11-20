@@ -124,8 +124,8 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
 
   // แสดงรายละเอียดใบลา
   void showRequestDetail(Map<String, dynamic> request) {
-    final employee = employeeMap[
-        request['employee_id'].toString()];
+    final employee =
+        employeeMap[request['employee_id'].toString()];
 
     final employeeName =
         employee?['full_name']?.toString() ?? 'ไม่พบข้อมูลพนักงาน';
@@ -286,6 +286,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
   }
 
   // อนุมัติหรือไม่อนุมัติผ่าน Supabase RPC
+  // ส่งแจ้งเตือน LINE หลังจากบันทึกผลสำเร็จ
   Future<void> processApproval(
     Map<String, dynamic> request,
     bool approved,
@@ -361,9 +362,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
     try {
       final requestId = request['id'];
 
-      // เรียกใช้ PostgreSQL Function
-      // ฟังก์ชันจะจัดการเปลี่ยนสถานะ
-      // บันทึกประวัติ และตัดสิทธิ์วันลาแบบ Transaction
+      // เรียก PostgreSQL Function เดิม
       final response = await supabase.rpc(
         'approve_leave_request',
         params: {
@@ -378,6 +377,37 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
       final result = Map<String, dynamic>.from(response);
 
       if (result['success'] == true) {
+        // ==========================================
+        // ส่งแจ้งเตือน LINE หลังบันทึกผลสำเร็จ
+        // เพิ่ม Log เพื่อใช้ตรวจสอบปัญหา
+        // ==========================================
+        try {
+          debugPrint('===== START LINE APPROVAL NOTIFY =====');
+          debugPrint('Request ID: $requestId');
+          debugPrint('Action: ${approved ? 'approved' : 'rejected'}');
+          debugPrint('Current user: ${supabase.auth.currentUser?.id}');
+
+          final lineResponse = await supabase.functions.invoke(
+            'mg-leave-approval-notify',
+            body: {
+              'request_id': requestId,
+              'action': approved ? 'approved' : 'rejected',
+              'comment': comment,
+            },
+          );
+
+          debugPrint('LINE approval status: ${lineResponse.status}');
+          debugPrint('LINE approval response: ${lineResponse.data}');
+          debugPrint('===== LINE APPROVAL NOTIFY COMPLETE =====');
+        } catch (lineError, stackTrace) {
+          debugPrint('===== LINE APPROVAL NOTIFY FAILED =====');
+          debugPrint('LINE approval notification error: $lineError');
+          debugPrint('Stack trace: $stackTrace');
+        }
+
+        if (!mounted) return;
+
+        // แสดงข้อความแจ้งผลเดิม
         showMessage(
           result['message']?.toString() ??
               (approved
@@ -386,6 +416,7 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
           approved ? Colors.green : Colors.orange,
         );
 
+        // โหลดรายการใบลาใหม่เหมือนเดิม
         await loadRequests();
       } else {
         showMessage(
@@ -505,8 +536,8 @@ class _LeaveApprovalScreenState extends State<LeaveApprovalScreen> {
   }
 
   Widget _buildRequestCard(Map<String, dynamic> request) {
-    final employee = employeeMap[
-        request['employee_id'].toString()];
+    final employee =
+        employeeMap[request['employee_id'].toString()];
 
     final employeeName =
         employee?['full_name']?.toString() ?? 'ไม่พบข้อมูลพนักงาน';

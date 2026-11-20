@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart' as fp;
@@ -311,6 +310,9 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
     return true;
   }
 
+  // =========================================================
+  // ส่งคำขอลา และแจ้งเตือน LINE ผ่าน Edge Function
+  // =========================================================
   Future<void> submitRequest() async {
     if (isSubmitting || !validateForm()) return;
 
@@ -334,9 +336,10 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
     setState(() => isSubmitting = true);
 
     bool requestCreated = false;
+    String? lineNotifyError;
 
     try {
-      // เรียก RPC ให้ฐานข้อมูลตรวจสอบสิทธิ์ก่อนสร้างใบลา
+      // 1. สร้างใบลาผ่าน RPC ตามเดิม
       final result = await supabase.rpc(
         'submit_leave_request',
         params: {
@@ -355,7 +358,39 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
 
       requestCreated = true;
 
-      // อัปโหลดเอกสารหลังสร้างคำขอสำเร็จ
+      // 2. แจ้งเตือน LINE หลังสร้างใบลาสำเร็จ
+      //    ใช้ Edge Function mg-leave-notify
+      //    ไม่ใช้ LINE API Key ใน Flutter
+      try {
+        final lineResponse = await supabase.functions.invoke(
+          'mg-leave-notify',
+          body: {
+            'request_id': requestId,
+          },
+        );
+
+        if (lineResponse.status < 200 ||
+            lineResponse.status >= 300) {
+          lineNotifyError =
+              'LINE แจ้งเตือนไม่สำเร็จ (${lineResponse.status})';
+
+          debugPrint(
+            'LINE notification status: ${lineResponse.status}',
+          );
+
+          debugPrint(
+            'LINE notification response: ${lineResponse.data}',
+          );
+        } else {
+          debugPrint('LINE notification sent successfully');
+        }
+      } catch (e) {
+        lineNotifyError = 'LINE แจ้งเตือนไม่สำเร็จ';
+
+        debugPrint('mg-leave-notify error: $e');
+      }
+
+      // 3. อัปโหลดเอกสารหลังสร้างคำขอสำเร็จ
       if (filesToUpload.isNotEmpty) {
         await uploadAttachments(
           employeeId: user.id,
@@ -366,6 +401,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
 
       if (!mounted) return;
 
+      // 4. รีเซ็ตแบบฟอร์ม
       setState(() {
         selectedLeaveTypeId = null;
         startDate = null;
@@ -375,11 +411,14 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         selectedFileSizes.clear();
       });
 
+      // 5. แสดงผลการส่งคำขอ
       showMessage(
-        filesToUpload.isNotEmpty
-            ? 'ส่งคำขอลาพร้อมเอกสารแนบสำเร็จ รอการอนุมัติ'
-            : 'ส่งคำขอลางานสำเร็จ รอการอนุมัติจากผู้บังคับบัญชา',
-        Colors.green,
+        lineNotifyError == null
+            ? (filesToUpload.isNotEmpty
+                ? 'ส่งคำขอลาพร้อมเอกสารแนบสำเร็จ รอการอนุมัติ'
+                : 'ส่งคำขอลางานสำเร็จ รอการอนุมัติจากผู้บังคับบัญชา')
+            : 'บันทึกใบลาสำเร็จ แต่ $lineNotifyError',
+        lineNotifyError == null ? Colors.green : Colors.orange,
       );
     } on PostgrestException catch (e) {
       showMessage(

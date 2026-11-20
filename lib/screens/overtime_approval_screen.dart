@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -237,7 +236,7 @@ class _OvertimeApprovalScreenState
     return time.length >= 5 ? time.substring(0, 5) : time;
   }
 
-  // อนุมัติ / ไม่อนุมัติคำขอ
+  // อนุมัติ / ไม่อนุมัติคำขอ พร้อมแจ้ง LINE
   Future<void> updateRequest({
     required Map<String, dynamic> item,
     required String status,
@@ -269,10 +268,9 @@ class _OvertimeApprovalScreenState
             'status': status,
             'approved_by': user.id,
             'approved_at': now,
-            'rejection_reason':
-                status == 'rejected'
-                    ? rejectionReason!.trim()
-                    : null,
+            'rejection_reason': status == 'rejected'
+                ? rejectionReason!.trim()
+                : null,
             'updated_at': now,
           })
           .eq('id', item['id'])
@@ -284,6 +282,39 @@ class _OvertimeApprovalScreenState
         throw Exception(
           'ไม่พบคำขอที่รออนุมัติ อาจมีผู้พิจารณารายการนี้ไปแล้ว กรุณารีเฟรช',
         );
+      }
+
+      // ===== แจ้งเตือน LINE หลังบันทึกสำเร็จ =====
+      try {
+        debugPrint('===== START OT APPROVAL LINE NOTIFY =====');
+        debugPrint('OT Request ID: ${item['id']}');
+        debugPrint('OT Action: $status');
+
+        final lineResponse = await supabase.functions.invoke(
+          'mg-overtime-approval-notify',
+          body: {
+            'request_id': item['id'],
+            'action': status,
+            'comment': status == 'rejected'
+                ? rejectionReason!.trim()
+                : null,
+          },
+        );
+
+        debugPrint(
+          'OT approval LINE status: ${lineResponse.status}',
+        );
+        debugPrint(
+          'OT approval LINE response: ${lineResponse.data}',
+        );
+        debugPrint(
+          '===== OT APPROVAL LINE NOTIFY COMPLETE =====',
+        );
+      } catch (lineError) {
+        debugPrint(
+          '===== OT APPROVAL LINE NOTIFY FAILED =====',
+        );
+        debugPrint('LINE notify error: $lineError');
       }
 
       if (!mounted) return;

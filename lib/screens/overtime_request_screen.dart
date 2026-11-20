@@ -149,7 +149,8 @@ class _OvertimeRequestScreenState
           '${workDate.month.toString().padLeft(2, '0')}-'
           '${workDate.day.toString().padLeft(2, '0')}';
 
-      await supabase
+      // บันทึก OT และรับ ID ของรายการที่เพิ่งบันทึก
+      final insertedRequest = await supabase
           .from('overtime_requests')
           .insert({
         'user_id': user.id,
@@ -158,7 +159,37 @@ class _OvertimeRequestScreenState
         'end_time': formatTime(endTime),
         'reason': reasonController.text.trim(),
         'status': 'pending',
-      });
+      })
+          .select('id')
+          .single();
+
+      final requestId = insertedRequest['id'];
+
+      // ส่งแจ้งเตือน LINE หลังบันทึก OT สำเร็จ
+      try {
+        debugPrint('===== START OT LINE NOTIFY =====');
+        debugPrint('OT Request ID: $requestId');
+
+        final lineResponse = await supabase.functions.invoke(
+          'mg-overtime-notify',
+          body: {
+            'request_id': requestId,
+          },
+        );
+
+        debugPrint(
+          'OT LINE status: ${lineResponse.status}',
+        );
+        debugPrint(
+          'OT LINE response: ${lineResponse.data}',
+        );
+        debugPrint('===== OT LINE NOTIFY COMPLETE =====');
+      } catch (lineError, stackTrace) {
+        // หาก LINE ล้มเหลว จะไม่ทำให้การบันทึก OT ล้มเหลว
+        debugPrint('===== OT LINE NOTIFY FAILED =====');
+        debugPrint('OT LINE error: $lineError');
+        debugPrint('OT LINE stack trace: $stackTrace');
+      }
 
       if (!mounted) return;
 
