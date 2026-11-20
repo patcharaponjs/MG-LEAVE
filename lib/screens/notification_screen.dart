@@ -85,7 +85,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
         isLoading = false;
       });
 
-      // ไม่แสดง SnackBar ซ้ำระหว่างตรวจสอบอัตโนมัติ
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -186,6 +185,39 @@ class _NotificationScreenState extends State<NotificationScreen> {
         .length;
   }
 
+  // ตรวจสอบว่าเป็นการแจ้งเตือน OT หรือไม่
+  bool isOvertimeNotification(Map<String, dynamic> item) {
+    return item['overtime_request_id'] != null;
+  }
+
+  // ตรวจสอบกรณีไม่อนุมัติ
+  bool isRejectedNotification(Map<String, dynamic> item) {
+    final title = item['title']?.toString() ?? '';
+    final message = item['message']?.toString() ?? '';
+
+    return title.contains('ไม่อนุมัติ') ||
+        title.contains('ไม่ผ่าน') ||
+        title.contains('ปฏิเสธ') ||
+        message.contains('ไม่ได้รับการอนุมัติ') ||
+        message.contains('ไม่อนุมัติ') ||
+        message.contains('ไม่ผ่าน') ||
+        message.contains('ปฏิเสธ');
+  }
+
+  // ตรวจสอบกรณีอนุมัติ
+  bool isApprovedNotification(Map<String, dynamic> item) {
+    final title = item['title']?.toString() ?? '';
+    final message = item['message']?.toString() ?? '';
+
+    // หากเป็นกรณีไม่อนุมัติ ห้ามจัดเป็นกรณีอนุมัติ
+    if (isRejectedNotification(item)) {
+      return false;
+    }
+
+    return title.contains('อนุมัติ') ||
+        message.contains('ได้รับการอนุมัติแล้ว');
+  }
+
   // แปลงวันที่
   String formatDate(dynamic value) {
     if (value == null) return '-';
@@ -205,13 +237,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  IconData getNotificationIcon(String title) {
-    if (title.contains('อนุมัติ')) {
+  // ไอคอนแจ้งเตือน
+  IconData getNotificationIcon(Map<String, dynamic> item) {
+    final title = item['title']?.toString() ?? '';
+
+    // ไม่อนุมัติ = กากบาท
+    if (isRejectedNotification(item)) {
+      return Icons.cancel;
+    }
+
+    // อนุมัติ = เครื่องหมายถูก
+    if (isApprovedNotification(item)) {
       return Icons.check_circle;
     }
 
-    if (title.contains('ปฏิเสธ')) {
-      return Icons.cancel;
+    // OT ใหม่ = นาฬิกา
+    if (isOvertimeNotification(item)) {
+      return Icons.access_time_filled;
     }
 
     if (title.contains('คำขอลาใหม่')) {
@@ -221,13 +263,23 @@ class _NotificationScreenState extends State<NotificationScreen> {
     return Icons.notifications_active;
   }
 
-  Color getNotificationColor(String title) {
-    if (title.contains('อนุมัติ')) {
+  // สีแจ้งเตือน
+  Color getNotificationColor(Map<String, dynamic> item) {
+    final title = item['title']?.toString() ?? '';
+
+    // ไม่อนุมัติ = สีแดง
+    if (isRejectedNotification(item)) {
+      return Colors.red;
+    }
+
+    // อนุมัติ = สีเขียว
+    if (isApprovedNotification(item)) {
       return Colors.green;
     }
 
-    if (title.contains('ปฏิเสธ')) {
-      return Colors.red;
+    // OT ใหม่ = สีส้ม
+    if (isOvertimeNotification(item)) {
+      return Colors.deepOrange;
     }
 
     if (title.contains('คำขอลาใหม่')) {
@@ -369,9 +421,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                 item['message']?.toString() ?? '';
                             final isRead =
                                 item['is_read'] == true;
+                            final isOT =
+                                isOvertimeNotification(item);
 
                             final color =
-                                getNotificationColor(title);
+                                getNotificationColor(item);
 
                             return Card(
                               elevation: 1,
@@ -409,7 +463,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                         backgroundColor:
                                             color.withValues(alpha: 0.12),
                                         child: Icon(
-                                          getNotificationIcon(title),
+                                          getNotificationIcon(item),
                                           color: color,
                                           size: 25,
                                         ),
@@ -432,8 +486,39 @@ class _NotificationScreenState extends State<NotificationScreen> {
                                                     ),
                                                   ),
                                                 ),
+                                                if (isOT)
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3,
+                                                    ),
+                                                    decoration:
+                                                        BoxDecoration(
+                                                      color: const Color(
+                                                          0xFFFFF0E5),
+                                                      borderRadius:
+                                                          BorderRadius
+                                                              .circular(10),
+                                                    ),
+                                                    child: const Text(
+                                                      'OT',
+                                                      style: TextStyle(
+                                                        color:
+                                                            Colors.deepOrange,
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
                                                 if (!isRead)
                                                   Container(
+                                                    margin:
+                                                        const EdgeInsets.only(
+                                                      left: 8,
+                                                    ),
                                                     width: 9,
                                                     height: 9,
                                                     decoration:

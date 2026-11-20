@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -14,6 +15,11 @@ import 'notification_screen.dart';
 import 'profile_screen.dart';
 import 'leave_calendar_screen.dart';
 import 'all_leave_screen.dart';
+
+// หน้าระบบ OT
+import 'overtime_request_screen.dart';
+import 'overtime_history_screen.dart';
+import 'overtime_approval_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final String fullName;
@@ -111,7 +117,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 15),
               const Text(
                 'ไม่พบสิทธิ์การใช้งานของบัญชีนี้',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 15),
               ElevatedButton(
@@ -122,7 +131,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                   Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(builder: (_) => const LandingScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const LandingScreen(),
+                    ),
                     (route) => false,
                   );
                 },
@@ -140,7 +151,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text(
           'MG LEAVE MANAGEMENT',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 17,
+          ),
         ),
         backgroundColor: const Color(0xFF087FD0),
         foregroundColor: Colors.white,
@@ -158,7 +172,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const LandingScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const LandingScreen(),
+                ),
                 (route) => false,
               );
             },
@@ -177,7 +193,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF087FD0), Color(0xFF0399D1)],
+                  colors: [
+                    Color(0xFF087FD0),
+                    Color(0xFF0399D1),
+                  ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -188,7 +207,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   const Text(
                     'ยินดีต้อนรับ',
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -204,7 +226,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     isAdmin
                         ? 'ผู้ดูแลระบบ (Administrator)'
                         : 'พนักงาน (Employee)',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
                   ),
                 ],
               ),
@@ -223,7 +248,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             const SizedBox(height: 15),
 
+            // ==========================================
             // เมนูที่พนักงานและ Admin ใช้ร่วมกัน
+            // ==========================================
+
             menuCard(
               context: context,
               title: 'ยื่นใบลา',
@@ -233,7 +261,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const LeaveRequestScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const LeaveRequestScreen(),
+                  ),
                 );
               },
             ),
@@ -247,7 +277,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const LeaveHistoryScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const LeaveHistoryScreen(),
+                  ),
                 );
               },
             ),
@@ -261,12 +293,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const LeaveBalanceScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const LeaveBalanceScreen(),
+                  ),
                 );
               },
             ),
 
+            // ==========================================
+            // เมนูระบบ OT สำหรับพนักงานและ Admin
+            // ==========================================
+
+            menuCard(
+              context: context,
+              title: 'ยื่นคำขอทำงาน OT',
+              subtitle: 'ส่งคำขอทำงานล่วงเวลา',
+              icon: Icons.more_time,
+              color: Colors.deepOrange,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OvertimeRequestScreen(),
+                  ),
+                );
+              },
+            ),
+
+            menuCard(
+              context: context,
+              title: 'ประวัติการขอ OT',
+              subtitle: 'ตรวจสอบสถานะคำขอทำงานล่วงเวลา',
+              icon: Icons.history_toggle_off,
+              color: Colors.indigo,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const OvertimeHistoryScreen(),
+                  ),
+                );
+              },
+            ),
+
+            // ==========================================
             // เมนูเฉพาะ Admin
+            // ==========================================
+
             if (isAdmin) ...[
               const SizedBox(height: 10),
 
@@ -291,8 +364,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) =>
-                          const LeaveHistoryScreen(showAllEmployees: true),
+                      builder: (_) => const LeaveHistoryScreen(
+                        showAllEmployees: true,
+                      ),
                     ),
                   );
                 },
@@ -309,6 +383,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     context,
                     MaterialPageRoute(
                       builder: (_) => const LeaveApprovalScreen(),
+                    ),
+                  );
+                },
+              ),
+
+              // เมนูอนุมัติ OT สำหรับ Admin
+              menuCard(
+                context: context,
+                title: 'อนุมัติคำขอ OT',
+                subtitle: 'ตรวจสอบและอนุมัติ OT ของพนักงาน',
+                icon: Icons.fact_check_outlined,
+                color: Colors.deepOrange,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const OvertimeApprovalScreen(),
                     ),
                   );
                 },
@@ -378,6 +469,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ],
+
+            // ==========================================
+            // เมนูข้อมูลส่วนตัว
+            // ==========================================
+
             menuCard(
               context: context,
               title: 'ข้อมูลส่วนตัว',
@@ -387,10 +483,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const ProfileScreen(),
+                  ),
                 );
               },
             ),
+
             menuCard(
               context: context,
               title: 'ปฏิทินการลา',
@@ -401,12 +500,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        LeaveCalendarScreen(showAllEmployees: isAdmin),
+                    builder: (_) => LeaveCalendarScreen(
+                      showAllEmployees: isAdmin,
+                    ),
                   ),
                 );
               },
             ),
+
             const SizedBox(height: 10),
 
             menuCard(
@@ -418,14 +519,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const AllLeaveScreen()),
+                  MaterialPageRoute(
+                    builder: (_) => const AllLeaveScreen(),
+                  ),
                 );
               },
             ),
 
             const SizedBox(height: 20),
 
+            // ==========================================
             // ข้อมูลระบบ
+            // ==========================================
+
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(17),
@@ -490,7 +596,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(icon, color: color, size: 28),
+                  child: Icon(
+                    icon,
+                    color: color,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
@@ -560,13 +670,18 @@ class NotificationBell extends StatelessWidget {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const NotificationScreen()),
+              MaterialPageRoute(
+                builder: (_) => const NotificationScreen(),
+              ),
             );
           },
           icon: Stack(
             clipBehavior: Clip.none,
             children: [
-              const Icon(Icons.notifications_outlined, size: 28),
+              const Icon(
+                Icons.notifications_outlined,
+                size: 28,
+              ),
 
               if (unreadCount > 0)
                 Positioned(

@@ -17,7 +17,6 @@ class LandingScreen extends StatefulWidget {
 class _LandingScreenState extends State<LandingScreen> {
   final supabase = Supabase.instance.client;
 
-  // Controller และ Key สำหรับเลื่อนไปยังปฏิทิน
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _calendarKey = GlobalKey();
 
@@ -25,6 +24,7 @@ class _LandingScreenState extends State<LandingScreen> {
 
   String fullName = '';
   String role = '';
+  String avatarUrl = '';
   bool isLoggedIn = false;
   bool profileLoading = true;
 
@@ -38,7 +38,13 @@ class _LandingScreenState extends State<LandingScreen> {
 
   Map<String, int> calendarData = {};
 
+  // ข้อมูลตาราง OT
+  bool overtimeLoading = true;
+  String? overtimeError;
+  List<Map<String, dynamic>> overtimeSchedules = [];
+
   DateTime selectedMonth = DateTime.now();
+  DateTime selectedCalendarDate = DateTime.now();
 
   static const Color primary = Color(0xFF087FD0);
   static const Color dark = Color(0xFF142B4A);
@@ -65,9 +71,9 @@ class _LandingScreenState extends State<LandingScreen> {
 
     loadUser();
     loadPublicData();
+    loadOvertimeSchedules();
 
-    authSubscription =
-        supabase.auth.onAuthStateChange.listen((data) {
+    authSubscription = supabase.auth.onAuthStateChange.listen((data) {
       loadUser();
     });
   }
@@ -93,6 +99,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // โหลดข้อมูลผู้ใช้งานและรูปโปรไฟล์
   Future<void> loadUser() async {
     final user = supabase.auth.currentUser;
 
@@ -103,6 +110,7 @@ class _LandingScreenState extends State<LandingScreen> {
         isLoggedIn = false;
         fullName = '';
         role = '';
+        avatarUrl = '';
         profileLoading = false;
       });
       return;
@@ -111,7 +119,7 @@ class _LandingScreenState extends State<LandingScreen> {
     try {
       final profile = await supabase
           .from('profiles')
-          .select('full_name, role, is_active')
+          .select('full_name, role, is_active, avatar_url')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -126,6 +134,7 @@ class _LandingScreenState extends State<LandingScreen> {
         isLoggedIn = true;
         fullName = profile['full_name']?.toString() ?? 'ผู้ใช้งาน';
         role = profile['role']?.toString() ?? '';
+        avatarUrl = profile['avatar_url']?.toString() ?? '';
         profileLoading = false;
       });
     } catch (e) {
@@ -134,11 +143,14 @@ class _LandingScreenState extends State<LandingScreen> {
       setState(() {
         isLoggedIn = true;
         fullName = user.email ?? 'ผู้ใช้งาน';
+        role = '';
+        avatarUrl = '';
         profileLoading = false;
       });
     }
   }
 
+  // โหลดข้อมูลภาพรวมและปฏิทินการลา
   Future<void> loadPublicData() async {
     if (!mounted) return;
 
@@ -178,6 +190,7 @@ class _LandingScreenState extends State<LandingScreen> {
 
       for (final item in calendar) {
         final date = item['leave_date']?.toString();
+
         final count = int.tryParse(
               item['total_on_leave']?.toString() ?? '',
             ) ??
@@ -222,6 +235,51 @@ class _LandingScreenState extends State<LandingScreen> {
     }
   }
 
+  // โหลดรายการ OT ที่อนุมัติแล้ว พร้อมรูปโปรไฟล์
+  Future<void> loadOvertimeSchedules() async {
+    if (!mounted) return;
+
+    setState(() {
+      overtimeLoading = true;
+      overtimeError = null;
+    });
+
+    try {
+      final response = await supabase
+          .from('public_overtime_schedule')
+          .select(
+            'id, work_date, start_time, end_time, total_hours, employee_name, avatar_url',
+          )
+          .order('work_date', ascending: true)
+          .order('start_time', ascending: true);
+
+      final result = List<Map<String, dynamic>>.from(response);
+
+      if (!mounted) return;
+
+      setState(() {
+        overtimeSchedules = result;
+        overtimeLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        overtimeLoading = false;
+        overtimeError = e.toString();
+      });
+    }
+  }
+
+  // รีเฟรชข้อมูลทั้งหมดหน้า Landing
+  Future<void> refreshLanding() async {
+    await Future.wait([
+      loadPublicData(),
+      loadOvertimeSchedules(),
+    ]);
+  }
+
+  // รูปแบบวันที่
   String dateKey(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
@@ -229,6 +287,29 @@ class _LandingScreenState extends State<LandingScreen> {
     return '${date.year}-$month-$day';
   }
 
+  String formatDate(dynamic value) {
+    if (value == null) return '-';
+
+    try {
+      final date = DateTime.parse(value.toString());
+
+      return '${date.day.toString().padLeft(2, '0')}/'
+          '${date.month.toString().padLeft(2, '0')}/'
+          '${date.year + 543}';
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String formatTime(dynamic value) {
+    if (value == null) return '-';
+
+    final time = value.toString();
+
+    return time.length >= 5 ? time.substring(0, 5) : time;
+  }
+
+  // เข้าสู่ระบบ
   Future<void> openLogin() async {
     await Navigator.push(
       context,
@@ -240,6 +321,7 @@ class _LandingScreenState extends State<LandingScreen> {
     loadUser();
   }
 
+  // ออกจากระบบ
   Future<void> logout() async {
     await supabase.auth.signOut();
 
@@ -249,6 +331,8 @@ class _LandingScreenState extends State<LandingScreen> {
       isLoggedIn = false;
       fullName = '';
       role = '';
+      avatarUrl = '';
+      profileLoading = false;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -258,6 +342,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // เปิด Dashboard
   void openDashboard() {
     Navigator.push(
       context,
@@ -267,6 +352,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // เปลี่ยนเดือนปฏิทิน
   void changeMonth(int amount) {
     setState(() {
       selectedMonth = DateTime(
@@ -274,6 +360,7 @@ class _LandingScreenState extends State<LandingScreen> {
         selectedMonth.month + amount,
         1,
       );
+      selectedCalendarDate = selectedMonth;
     });
 
     loadPublicData();
@@ -285,7 +372,7 @@ class _LandingScreenState extends State<LandingScreen> {
       backgroundColor: background,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: loadPublicData,
+          onRefresh: refreshLanding,
           child: CustomScrollView(
             controller: _scrollController,
             slivers: [
@@ -297,6 +384,9 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
               SliverToBoxAdapter(
                 child: _buildOverview(),
+              ),
+              SliverToBoxAdapter(
+                child: _buildOvertimeSchedule(),
               ),
               SliverToBoxAdapter(
                 child: _buildCalendar(),
@@ -311,6 +401,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // HEADER
   Widget _buildHeader() {
     return Container(
       color: Colors.white,
@@ -350,7 +441,7 @@ class _LandingScreenState extends State<LandingScreen> {
                       ),
                     ),
                     Text(
-                      'ระบบบริหารจัดการการลางาน',
+                      'ระบบลางานและลงงานโอที',
                       style: TextStyle(
                         color: Colors.grey,
                         fontSize: 12,
@@ -363,7 +454,9 @@ class _LandingScreenState extends State<LandingScreen> {
                 const SizedBox(
                   width: 25,
                   height: 25,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
                 )
               else if (isLoggedIn)
                 PopupMenuButton<String>(
@@ -386,7 +479,10 @@ class _LandingScreenState extends State<LandingScreen> {
                     PopupMenuItem(
                       value: 'logout',
                       child: ListTile(
-                        leading: Icon(Icons.logout, color: Colors.red),
+                        leading: Icon(
+                          Icons.logout,
+                          color: Colors.red,
+                        ),
                         title: Text('ออกจากระบบ'),
                         contentPadding: EdgeInsets.zero,
                       ),
@@ -404,18 +500,25 @@ class _LandingScreenState extends State<LandingScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const CircleAvatar(
+                        CircleAvatar(
                           radius: 17,
                           backgroundColor: primary,
-                          child: Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                          backgroundImage: avatarUrl.isNotEmpty
+                              ? NetworkImage(avatarUrl)
+                              : null,
+                          child: avatarUrl.isEmpty
+                              ? const Icon(
+                                  Icons.person,
+                                  color: Colors.white,
+                                  size: 20,
+                                )
+                              : null,
                         ),
                         const SizedBox(width: 8),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 130),
+                          constraints: const BoxConstraints(
+                            maxWidth: 130,
+                          ),
                           child: Text(
                             fullName,
                             overflow: TextOverflow.ellipsis,
@@ -456,6 +559,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // HERO
   Widget _buildHero() {
     return Container(
       width: double.infinity,
@@ -503,7 +607,7 @@ class _LandingScreenState extends State<LandingScreen> {
                         borderRadius: BorderRadius.circular(30),
                       ),
                       child: const Text(
-                        'LEAVE MANAGEMENT SYSTEM',
+                        'LEAVE & OVERTIME MANAGEMENT SYSTEM',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 11,
@@ -514,7 +618,7 @@ class _LandingScreenState extends State<LandingScreen> {
                     ),
                     const SizedBox(height: 22),
                     const Text(
-                      'ระบบบริหารจัดการวันลาออนไลน์',
+                      'ระบบลางานและลงงานโอที',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 30,
@@ -566,7 +670,9 @@ class _LandingScreenState extends State<LandingScreen> {
                           label: const Text('ปฏิทินการลา'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
-                            side: const BorderSide(color: Colors.white70),
+                            side: const BorderSide(
+                              color: Colors.white70,
+                            ),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 18,
                               vertical: 15,
@@ -594,6 +700,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // ภาพรวมการลา
   Widget _buildOverview() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -613,12 +720,17 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'ข้อมูลสรุปจากระบบบริหารจัดการวันลา',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
+                'ข้อมูลสรุปคำขอลาจากระบบ',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 17),
               if (dataLoading)
-                const Center(child: CircularProgressIndicator())
+                const Center(
+                  child: CircularProgressIndicator(),
+                )
               else if (dataError != null)
                 _buildDataError()
               else
@@ -670,6 +782,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // การ์ดสถิติ
   Widget _statCard(
     String title,
     int count,
@@ -681,7 +794,9 @@ class _LandingScreenState extends State<LandingScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8EEF5)),
+        border: Border.all(
+          color: const Color(0xFFE8EEF5),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.025),
@@ -717,6 +832,7 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // ข้อผิดพลาดข้อมูลภาพรวม
   Widget _buildDataError() {
     return Container(
       width: double.infinity,
@@ -751,6 +867,316 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  // ตารางผู้ปฏิบัติงาน OT
+  Widget _buildOvertimeSchedule() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 35, 20, 10),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1100),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFE8EEF5),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.025),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.more_time,
+                        color: Colors.deepOrange,
+                        size: 27,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ตารางผู้ปฏิบัติงาน OT',
+                            style: TextStyle(
+                              color: dark,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'รายการ OT ที่ได้รับอนุมัติ',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'รีเฟรชรายการ OT',
+                      onPressed: overtimeLoading
+                          ? null
+                          : loadOvertimeSchedules,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                if (overtimeLoading)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(25),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                else if (overtimeError != null)
+                  _buildOvertimeError()
+                else if (overtimeSchedules.isEmpty)
+                  _buildEmptyOvertime()
+                else
+                  Column(
+                    children: overtimeSchedules
+                        .map((item) => _buildOvertimeCard(item))
+                        .toList(),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // การ์ด OT แต่ละรายการ พร้อมรูปโปรไฟล์
+  Widget _buildOvertimeCard(Map<String, dynamic> item) {
+    final avatarUrl = item['avatar_url']?.toString() ?? '';
+    final employeeName =
+        item['employee_name']?.toString() ?? 'ไม่ระบุชื่อพนักงาน';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFE6EDF5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.calendar_month,
+                color: primary,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  formatDate(item['work_date']),
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'อนุมัติแล้ว',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+
+          // รูปโปรไฟล์และชื่อพนักงาน
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: const Color(0xFFE8F3FC),
+                backgroundImage: avatarUrl.isNotEmpty
+                    ? NetworkImage(avatarUrl)
+                    : null,
+                child: avatarUrl.isEmpty
+                    ? const Icon(
+                        Icons.person,
+                        color: Colors.teal,
+                        size: 28,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  employeeName,
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(
+                Icons.access_time,
+                color: Colors.orange,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${formatTime(item['start_time'])} - '
+                  '${formatTime(item['end_time'])} น.',
+                  style: const TextStyle(
+                    color: dark,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(
+                Icons.timelapse,
+                color: Colors.indigo,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'รวม ${item['total_hours'] ?? '-'} ชั่วโมง',
+                style: const TextStyle(
+                  color: dark,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ไม่มีข้อมูล OT
+  Widget _buildEmptyOvertime() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(25),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F7FB),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.event_busy,
+            color: Colors.grey,
+            size: 40,
+          ),
+          SizedBox(height: 10),
+          Text(
+            'ยังไม่มีรายการ OT ที่อนุมัติ',
+            style: TextStyle(
+              color: Colors.grey,
+              fontSize: 15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Error OT
+  Widget _buildOvertimeError() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF5F5),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: Colors.red,
+            size: 35,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'ไม่สามารถโหลดรายการ OT ได้',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            overtimeError!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            onPressed: loadOvertimeSchedules,
+            icon: const Icon(Icons.refresh),
+            label: const Text('ลองอีกครั้ง'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ปฏิทินการลา
   Widget _buildCalendar() {
     final firstDay = DateTime(
       selectedMonth.year,
@@ -764,8 +1190,9 @@ class _LandingScreenState extends State<LandingScreen> {
       0,
     ).day;
 
-    // DateTime weekday: จันทร์ = 1, อาทิตย์ = 7
     final offset = firstDay.weekday % 7;
+    final selectedKey = dateKey(selectedCalendarDate);
+    final selectedCount = calendarData[selectedKey] ?? 0;
 
     return Padding(
       key: _calendarKey,
@@ -777,101 +1204,266 @@ class _LandingScreenState extends State<LandingScreen> {
             padding: const EdgeInsets.all(22),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFE8EEF5)),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: const Color(0xFFE8EEF5),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.035),
+                  blurRadius: 18,
+                  offset: const Offset(0, 7),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'ปฏิทินการลา',
-                  style: TextStyle(
-                    color: dark,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 15),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                      onPressed: () => changeMonth(-1),
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    Text(
-                      '${months[selectedMonth.month - 1]} ${selectedMonth.year + 543}',
-                      style: const TextStyle(
-                        color: dark,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => changeMonth(1),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                GridView.count(
-                  crossAxisCount: 7,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.2,
-                  children: [
-                    for (final day in [
-                      'อา',
-                      'จ',
-                      'อ',
-                      'พ',
-                      'พฤ',
-                      'ศ',
-                      'ส',
-                    ])
-                      Center(
-                        child: Text(
-                          day,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    for (int i = 0; i < offset; i++)
-                      const SizedBox.shrink(),
-                    for (int day = 1; day <= daysInMonth; day++)
-                      _calendarDay(day),
-                  ],
-                ),
-                const SizedBox(height: 15),
-                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF087FD0),
-                        shape: BoxShape.circle,
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.calendar_month_rounded,
+                        color: primary,
+                        size: 26,
                       ),
                     ),
-                    const SizedBox(width: 7),
-                    const Text(
-                      'วันที่มีพนักงานลา',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ปฏิทินการลา',
+                            style: TextStyle(
+                              color: dark,
+                              fontSize: 21,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'ภาพรวมจำนวนผู้ลาในแต่ละวัน',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
                     if (dataLoading)
-                      const Text(
-                        'กำลังโหลด...',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontSize: 11,
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
                         ),
                       ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF6F9FD),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFE8EEF5),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'เดือนก่อน',
+                        onPressed: () => changeMonth(-1),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: primary,
+                        ),
+                        icon: const Icon(Icons.chevron_left_rounded),
+                      ),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              months[selectedMonth.month - 1],
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: dark,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            Text(
+                              '${selectedMonth.year + 543}',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'เดือนถัดไป',
+                        onPressed: () => changeMonth(1),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: primary,
+                        ),
+                        icon: const Icon(Icons.chevron_right_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      setState(() {
+                        selectedMonth = DateTime(now.year, now.month, 1);
+                        selectedCalendarDate = now;
+                      });
+                      loadPublicData();
+                    },
+                    icon: const Icon(Icons.today_rounded, size: 18),
+                    label: const Text('วันนี้'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cellWidth = constraints.maxWidth / 7;
+                    final ratio = cellWidth < 55 ? 0.75 : 1.05;
+
+                    return GridView.count(
+                      crossAxisCount: 7,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 4,
+                      mainAxisSpacing: 5,
+                      childAspectRatio: ratio,
+                      children: [
+                        for (final day in [
+                          'อา',
+                          'จ',
+                          'อ',
+                          'พ',
+                          'พฤ',
+                          'ศ',
+                          'ส',
+                        ])
+                          Center(
+                            child: Text(
+                              day,
+                              style: const TextStyle(
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        for (int i = 0; i < offset; i++)
+                          const SizedBox.shrink(),
+                        for (int day = 1; day <= daysInMonth; day++)
+                          _calendarDay(day),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: selectedCount > 0
+                        ? primary.withValues(alpha: 0.07)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selectedCount > 0
+                          ? primary.withValues(alpha: 0.20)
+                          : const Color(0xFFE8EEF5),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.event_note_rounded,
+                          color: primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${selectedCalendarDate.day} '
+                              '${months[selectedCalendarDate.month - 1]} '
+                              '${selectedCalendarDate.year + 543}',
+                              style: const TextStyle(
+                                color: dark,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              selectedCount > 0
+                                  ? 'มีพนักงานลา $selectedCount คน'
+                                  : 'ไม่มีข้อมูลการลาในวันที่เลือก',
+                              style: TextStyle(
+                                color: selectedCount > 0
+                                    ? primary
+                                    : Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _calendarLegend(
+                      color: primary,
+                      label: 'วันที่มีพนักงานลา',
+                    ),
+                    _calendarLegend(
+                      color: const Color(0xFF16A34A),
+                      label: 'วันที่ปัจจุบัน',
+                      outlined: true,
+                    ),
                   ],
                 ),
               ],
@@ -882,6 +1474,36 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 
+  Widget _calendarLegend({
+    required Color color,
+    required String label,
+    bool outlined = false,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: outlined ? Colors.white : color,
+            shape: BoxShape.circle,
+            border: outlined ? Border.all(color: color, width: 2) : null,
+          ),
+        ),
+        const SizedBox(width: 7),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 12,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // วันที่ในปฏิทิน
   Widget _calendarDay(int day) {
     final date = DateTime(
       selectedMonth.year,
@@ -892,55 +1514,89 @@ class _LandingScreenState extends State<LandingScreen> {
     final key = dateKey(date);
     final count = calendarData[key] ?? 0;
     final isToday = dateKey(DateTime.now()) == key;
+    final isSelected = dateKey(selectedCalendarDate) == key;
 
-    return Container(
-      margin: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: count > 0
-            ? primary.withValues(alpha: 0.12)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(9),
-        border: isToday
-            ? Border.all(color: primary, width: 1.5)
-            : null,
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            '$day',
-            style: TextStyle(
-              color: count > 0 ? primary : dark,
-              fontWeight: isToday || count > 0
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-            ),
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        setState(() {
+          selectedCalendarDate = date;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? primary.withValues(alpha: 0.13)
+              : count > 0
+                  ? primary.withValues(alpha: 0.055)
+                  : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isToday
+                ? const Color(0xFF16A34A)
+                : isSelected
+                    ? primary
+                    : count > 0
+                        ? primary.withValues(alpha: 0.18)
+                        : const Color(0xFFE8EEF5),
+            width: isToday || isSelected ? 1.5 : 1,
           ),
-          if (count > 0)
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 5,
-                vertical: 1,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '$day',
+              style: TextStyle(
+                color: isSelected || count > 0 ? primary : dark,
+                fontWeight: isToday || isSelected || count > 0
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                fontSize: 13,
               ),
-              decoration: BoxDecoration(
-                color: primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '$count',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
+            ),
+            if (count > 0) ...[
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(minWidth: 22),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 5,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: primary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$count',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-        ],
+            ] else if (isToday) ...[
+              const SizedBox(height: 4),
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF16A34A),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
+  // FOOTER
   Widget _buildFooter() {
     return Container(
       width: double.infinity,
@@ -967,7 +1623,7 @@ class _LandingScreenState extends State<LandingScreen> {
           ),
           SizedBox(height: 5),
           Text(
-            'ระบบบริหารจัดการการลางาน',
+            'ระบบลางานและลงงานโอที',
             style: TextStyle(
               color: Colors.white60,
               fontSize: 12,

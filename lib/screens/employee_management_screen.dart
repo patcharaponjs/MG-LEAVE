@@ -38,7 +38,7 @@ class _EmployeeManagementScreenState
     super.dispose();
   }
 
-  // โหลดรายชื่อพนักงาน
+  // โหลดข้อมูลบุคลากร
   Future<void> loadEmployees() async {
     if (mounted) {
       setState(() {
@@ -82,11 +82,15 @@ class _EmployeeManagementScreenState
     }
   }
 
-  // ค้นหาพนักงานด้วยชื่อ รหัสพนักงาน หรือเบอร์โทรศัพท์
+  // แสดงเฉพาะบัญชีที่เปิดใช้งาน
   void filterEmployees() {
     final keyword = searchText.toLowerCase().trim();
 
     filteredEmployees = employees.where((employee) {
+      if (employee['is_active'] != true) {
+        return false;
+      }
+
       final name =
           (employee['full_name'] ?? '').toString().toLowerCase();
 
@@ -106,7 +110,7 @@ class _EmployeeManagementScreenState
     }
   }
 
-  // หาชื่อแผนกจาก department_id
+  // ค้นหาชื่อแผนก
   String getDepartmentName(dynamic departmentId) {
     if (departmentId == null) {
       return 'ยังไม่ได้ระบุแผนก';
@@ -124,7 +128,7 @@ class _EmployeeManagementScreenState
         'ไม่พบข้อมูลแผนก';
   }
 
-  // เปิดหน้าเพิ่มพนักงาน
+  // เพิ่มพนักงาน
   Future<void> openAddEmployee() async {
     final result = await Navigator.push(
       context,
@@ -149,7 +153,7 @@ class _EmployeeManagementScreenState
     }
   }
 
-  // เปิดหน้าแก้ไขพนักงาน
+  // แก้ไขข้อมูลพนักงาน
   Future<void> editEmployee(
     Map<String, dynamic> employee,
   ) async {
@@ -178,22 +182,24 @@ class _EmployeeManagementScreenState
     }
   }
 
-  // ปิดใช้งานพนักงาน
-  Future<void> deleteEmployee(
+  // ปิดบัญชี หรือ เปิดบัญชีกลับ
+  // เก็บข้อมูลพนักงานและประวัติไว้
+  Future<void> changeEmployeeStatus(
     Map<String, dynamic> employee,
+    bool newStatus,
   ) async {
     final id = employee['id']?.toString();
     final name = employee['full_name']?.toString() ?? 'พนักงาน';
 
     if (id == null || id.isEmpty) return;
 
-    // ป้องกันการปิดใช้งานบัญชีตัวเอง
     final currentUserId = supabase.auth.currentUser?.id;
 
-    if (currentUserId == id) {
+    // ห้ามปิดบัญชีตัวเอง
+    if (currentUserId == id && !newStatus) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('ไม่สามารถปิดใช้งานบัญชีที่กำลังเข้าสู่ระบบได้'),
+          content: Text('ไม่สามารถปิดบัญชีที่กำลังเข้าสู่ระบบได้'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -207,32 +213,40 @@ class _EmployeeManagementScreenState
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.red),
-              SizedBox(width: 10),
-              Text('ยืนยันการปิดใช้งาน'),
+              Icon(
+                newStatus ? Icons.person_add_alt_1 : Icons.person_off,
+                color: newStatus ? Colors.green : Colors.orange,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  newStatus ? 'เปิดบัญชีอีกครั้ง' : 'ปิดบัญชีพนักงาน',
+                ),
+              ),
             ],
           ),
           content: Text(
-            'คุณต้องการปิดใช้งานพนักงาน "$name" ใช่หรือไม่?\n\n'
-            'พนักงานจะไม่สามารถเข้าสู่ระบบได้ แต่ข้อมูลและประวัติการลางานเดิมจะยังคงอยู่',
+            newStatus
+                ? 'ต้องการเปิดบัญชี "$name" กลับมาใช้งานอีกครั้งหรือไม่?'
+                : 'ต้องการปิดบัญชี "$name" หรือไม่?\n\n'
+                    'ข้อมูลพนักงาน ประวัติการลา และ OT จะยังคงอยู่ '
+                    'และสามารถเปิดบัญชีนี้กลับมาได้ภายหลัง',
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('ยกเลิก'),
             ),
             ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              icon: const Icon(Icons.person_off),
-              label: const Text('ยืนยันปิดใช้งาน'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: Icon(
+                newStatus ? Icons.check_circle : Icons.person_off,
+              ),
+              label: Text(newStatus ? 'เปิดบัญชี' : 'ปิดบัญชี'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
+                backgroundColor: newStatus ? Colors.green : Colors.orange,
                 foregroundColor: Colors.white,
               ),
             ),
@@ -250,26 +264,33 @@ class _EmployeeManagementScreenState
     try {
       await supabase
           .from('profiles')
-          .update({'is_active': false})
+          .update({'is_active': newStatus})
           .eq('id', id);
+
+      await loadEmployees();
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ปิดใช้งานพนักงาน "$name" เรียบร้อยแล้ว'),
+          content: Text(
+            newStatus
+                ? 'เปิดบัญชี "$name" เรียบร้อยแล้ว'
+                : 'ปิดบัญชี "$name" เรียบร้อยแล้ว',
+          ),
           backgroundColor: Colors.green,
         ),
       );
-
-      await loadEmployees();
     } catch (e) {
+      debugPrint('CHANGE STATUS ERROR: $e');
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('ไม่สามารถปิดใช้งานพนักงานได้: $e'),
+          content: Text('เปลี่ยนสถานะบัญชีไม่สำเร็จ: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 10),
         ),
       );
     } finally {
@@ -281,11 +302,326 @@ class _EmployeeManagementScreenState
     }
   }
 
+  // ลบข้อมูลพนักงานจริงจาก profiles
+  Future<void> deleteEmployeePermanently(
+    Map<String, dynamic> employee,
+  ) async {
+    final id = employee['id']?.toString();
+    final name = employee['full_name']?.toString() ?? 'พนักงาน';
+
+    if (id == null || id.isEmpty) return;
+
+    final currentUserId = supabase.auth.currentUser?.id;
+
+    // ห้ามลบบัญชีที่กำลังเข้าสู่ระบบ
+    if (currentUserId == id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('ไม่สามารถลบข้อมูลบัญชีที่กำลังเข้าสู่ระบบได้'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.delete_forever, color: Colors.red),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text('ลบข้อมูลพนักงานจริง'),
+              ),
+            ],
+          ),
+          content: Text(
+            'คุณกำลังลบข้อมูล "$name" ออกจากตาราง profiles\n\n'
+            'การดำเนินการนี้ไม่ใช่การปิดบัญชี '
+            'ข้อมูลโปรไฟล์จะถูกลบออกจากตาราง profiles จริง '
+            'และไม่สามารถเปิดใช้งานจากหน้ารายการปิดบัญชีได้อีก\n\n'
+            'หากมีประวัติการลา OT หรือข้อมูลอื่นเชื่อมโยงอยู่ '
+            'ระบบฐานข้อมูลอาจปฏิเสธการลบ\n\n'
+            'ต้องการดำเนินการต่อหรือไม่?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('ยกเลิก'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: const Icon(Icons.delete_forever),
+              label: const Text('ลบข้อมูลจริง'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true || !mounted) return;
+
+    setState(() {
+      deletingIds.add(id);
+    });
+
+    try {
+      // ลบเฉพาะข้อมูลโปรไฟล์ของพนักงานที่เลือก
+      await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', id);
+
+      await loadEmployees();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ลบข้อมูล "$name" จาก profiles แล้ว'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } on PostgrestException catch (e) {
+      // แสดงข้อความ Error จริงจาก Supabase
+      debugPrint('DELETE EMPLOYEE POSTGRES ERROR: ${e.message}');
+      debugPrint('DELETE EMPLOYEE CODE: ${e.code}');
+      debugPrint('DELETE EMPLOYEE DETAILS: ${e.details}');
+      debugPrint('DELETE EMPLOYEE HINT: ${e.hint}');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'ลบไม่สำเร็จ\n'
+            'ข้อความ: ${e.message}\n'
+            'รหัส: ${e.code ?? "-"}\n'
+            'รายละเอียด: ${e.details ?? "-"}\n'
+            'คำแนะนำ: ${e.hint ?? "-"}',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 15),
+        ),
+      );
+    } catch (e) {
+      debugPrint('DELETE EMPLOYEE ERROR: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ลบไม่สำเร็จ: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 15),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          deletingIds.remove(id);
+        });
+      }
+    }
+  }
+
+  // เปิดหน้าต่างดูบัญชีที่ปิดใช้งาน
+  Future<void> showInactiveEmployees() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            final currentInactive = employees
+                .where((e) => e['is_active'] != true)
+                .toList();
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              title: Row(
+                children: [
+                  const Icon(
+                    Icons.person_off,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('บัญชีที่ปิดใช้งาน'),
+                  ),
+                  Text(
+                    '${currentInactive.length}',
+                    style: const TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 500,
+                height: 450,
+                child: currentInactive.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              size: 60,
+                              color: Colors.green,
+                            ),
+                            SizedBox(height: 12),
+                            Text('ไม่มีบัญชีที่ปิดใช้งาน'),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: currentInactive.length,
+                        itemBuilder: (context, index) {
+                          final employee = currentInactive[index];
+
+                          final id =
+                              employee['id']?.toString() ?? '';
+
+                          final name =
+                              employee['full_name']?.toString() ??
+                                  'ไม่ระบุชื่อ';
+
+                          final code =
+                              employee['employee_code']?.toString() ??
+                                  '-';
+
+                          final isBusy = deletingIds.contains(id);
+
+                          return Card(
+                            color: Colors.orange.shade50,
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text('รหัสพนักงาน: $code'),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    getDepartmentName(
+                                      employee['department_id'],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+
+                                  // เปิดบัญชีกลับ
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: isBusy
+                                          ? null
+                                          : () async {
+                                              await changeEmployeeStatus(
+                                                employee,
+                                                true,
+                                              );
+
+                                              dialogSetState(() {});
+                                            },
+                                      icon: const Icon(
+                                        Icons.person_add_alt_1,
+                                      ),
+                                      label: const Text(
+                                        'เปิดใช้งานบัญชีนี้',
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(height: 6),
+
+                                  // ลบข้อมูลจริง
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: isBusy
+                                          ? null
+                                          : () async {
+                                              await deleteEmployeePermanently(
+                                                employee,
+                                              );
+
+                                              dialogSetState(() {});
+                                            },
+                                      icon: isBusy
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child:
+                                                  CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.delete_forever,
+                                            ),
+                                      label: const Text(
+                                        'ลบข้อมูลพนักงานจริง',
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red,
+                                        side: const BorderSide(
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('ปิด'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // นับจำนวนบัญชีที่เปิดใช้งาน
     final activeCount =
         employees.where((e) => e['is_active'] == true).length;
 
+    // นับบัญชีที่ปิดใช้งาน
     final inactiveCount =
         employees.where((e) => e['is_active'] != true).length;
 
@@ -303,6 +639,14 @@ class _EmployeeManagementScreenState
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // ดูบัญชีที่ปิดใช้งาน
+          IconButton(
+            onPressed: showInactiveEmployees,
+            icon: const Icon(Icons.manage_accounts),
+            tooltip: 'จัดการบัญชีที่ปิดใช้งาน',
+          ),
+
+          // โหลดใหม่
           IconButton(
             onPressed: loadEmployees,
             icon: const Icon(Icons.refresh),
@@ -310,6 +654,7 @@ class _EmployeeManagementScreenState
           ),
         ],
       ),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: openAddEmployee,
         backgroundColor: const Color(0xFF087FD0),
@@ -317,9 +662,10 @@ class _EmployeeManagementScreenState
         icon: const Icon(Icons.person_add),
         label: const Text('เพิ่มพนักงาน'),
       ),
+
       body: Column(
         children: [
-          // ส่วนสรุปจำนวนพนักงาน
+          // สรุปข้อมูล
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -355,7 +701,7 @@ class _EmployeeManagementScreenState
                     Expanded(
                       child: summaryCard(
                         'พนักงานทั้งหมด',
-                        employees.length.toString(),
+                        activeCount.toString(),
                         Icons.people,
                       ),
                     ),
@@ -376,6 +722,25 @@ class _EmployeeManagementScreenState
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+
+                // ปุ่มดูบัญชีที่ปิดใช้งาน
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: showInactiveEmployees,
+                    icon: const Icon(Icons.manage_accounts),
+                    label: Text(
+                      'จัดการบัญชีที่ปิดใช้งาน ($inactiveCount)',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -413,7 +778,7 @@ class _EmployeeManagementScreenState
             ),
           ),
 
-          // รายชื่อพนักงาน
+          // รายชื่อพนักงานที่เปิดใช้งาน
           Expanded(
             child: isLoading
                 ? const Center(
@@ -431,8 +796,8 @@ class _EmployeeManagementScreenState
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              employees.isEmpty
-                                  ? 'ยังไม่มีข้อมูลพนักงาน'
+                              activeCount == 0
+                                  ? 'ยังไม่มีพนักงานที่ใช้งานอยู่'
                                   : 'ไม่พบข้อมูลที่ค้นหา',
                               style: TextStyle(
                                 fontSize: 16,
@@ -440,7 +805,7 @@ class _EmployeeManagementScreenState
                               ),
                             ),
                             const SizedBox(height: 8),
-                            if (employees.isEmpty)
+                            if (activeCount == 0)
                               const Text(
                                 'กดปุ่มเพิ่มพนักงานเพื่อเริ่มต้น',
                                 style: TextStyle(
@@ -465,7 +830,8 @@ class _EmployeeManagementScreenState
                                 filteredEmployees[index];
 
                             final fullName =
-                                (employee['full_name'] ?? 'ไม่ระบุชื่อ')
+                                (employee['full_name'] ??
+                                        'ไม่ระบุชื่อ')
                                     .toString();
 
                             final employeeCode =
@@ -473,11 +839,13 @@ class _EmployeeManagementScreenState
                                     .toString();
 
                             final phone =
-                                (employee['phone'] ?? 'ยังไม่ได้ระบุเบอร์โทรศัพท์')
+                                (employee['phone'] ??
+                                        'ยังไม่ได้ระบุเบอร์โทรศัพท์')
                                     .toString();
 
                             final position =
-                                (employee['position'] ?? 'ไม่ระบุตำแหน่ง')
+                                (employee['position'] ??
+                                        'ไม่ระบุตำแหน่ง')
                                     .toString();
 
                             final departmentName =
@@ -485,13 +853,10 @@ class _EmployeeManagementScreenState
                               employee['department_id'],
                             );
 
-                            final isActive =
-                                employee['is_active'] == true;
-
                             final employeeId =
                                 employee['id']?.toString() ?? '';
 
-                            final isDeleting =
+                            final isBusy =
                                 deletingIds.contains(employeeId);
 
                             final firstLetter =
@@ -502,13 +867,18 @@ class _EmployeeManagementScreenState
                             return Card(
                               elevation: 1,
                               color: Colors.white,
-                              margin: const EdgeInsets.only(bottom: 12),
+                              margin: const EdgeInsets.only(
+                                bottom: 12,
+                              ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius:
+                                    BorderRadius.circular(16),
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.all(15),
                                 child: Row(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     CircleAvatar(
                                       radius: 25,
@@ -519,7 +889,8 @@ class _EmployeeManagementScreenState
                                         style: const TextStyle(
                                           color: Color(0xFF087FD0),
                                           fontSize: 20,
-                                          fontWeight: FontWeight.bold,
+                                          fontWeight:
+                                              FontWeight.bold,
                                         ),
                                       ),
                                     ),
@@ -533,7 +904,8 @@ class _EmployeeManagementScreenState
                                             fullName,
                                             style: const TextStyle(
                                               fontSize: 16,
-                                              fontWeight: FontWeight.bold,
+                                              fontWeight:
+                                                  FontWeight.bold,
                                             ),
                                           ),
                                           const SizedBox(height: 5),
@@ -569,6 +941,8 @@ class _EmployeeManagementScreenState
                                             ),
                                           ),
                                           const SizedBox(height: 8),
+
+                                          // สถานะบัญชี
                                           Container(
                                             padding:
                                                 const EdgeInsets.symmetric(
@@ -576,112 +950,147 @@ class _EmployeeManagementScreenState
                                               vertical: 4,
                                             ),
                                             decoration: BoxDecoration(
-                                              color: isActive
-                                                  ? Colors.green.shade50
-                                                  : Colors.red.shade50,
+                                              color: Colors.green.shade50,
                                               borderRadius:
-                                                  BorderRadius.circular(20),
+                                                  BorderRadius.circular(
+                                                20,
+                                              ),
                                             ),
                                             child: Text(
-                                              isActive
-                                                  ? 'กำลังปฏิบัติงาน'
-                                                  : 'ไม่ใช้งาน',
+                                              'กำลังปฏิบัติงาน',
                                               style: TextStyle(
-                                                color: isActive
-                                                    ? Colors.green.shade700
-                                                    : Colors.red.shade700,
+                                                color: Colors.green.shade700,
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.bold,
+                                                fontWeight:
+                                                    FontWeight.bold,
                                               ),
                                             ),
                                           ),
 
-                                          // ปุ่มแก้ไขและปิดใช้งาน
                                           const SizedBox(height: 10),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: OutlinedButton.icon(
-                                                  onPressed: isDeleting
-                                                      ? null
-                                                      : () => editEmployee(
-                                                            employee,
-                                                          ),
-                                                  icon: const Icon(
-                                                    Icons.edit_outlined,
-                                                    size: 18,
-                                                  ),
-                                                  label: const Text(
-                                                    'แก้ไขข้อมูล',
-                                                  ),
-                                                  style: OutlinedButton
-                                                      .styleFrom(
-                                                    foregroundColor:
-                                                        const Color(
-                                                      0xFF087FD0,
-                                                    ),
-                                                    side: const BorderSide(
-                                                      color: Color(
-                                                        0xFF087FD0,
+
+                                          // แก้ไขข้อมูล
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              onPressed: isBusy
+                                                  ? null
+                                                  : () => editEmployee(
+                                                        employee,
                                                       ),
-                                                    ),
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .circular(10),
-                                                    ),
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                                size: 18,
+                                              ),
+                                              label: const Text(
+                                                'แก้ไขข้อมูล',
+                                              ),
+                                              style: OutlinedButton
+                                                  .styleFrom(
+                                                foregroundColor:
+                                                    const Color(
+                                                  0xFF087FD0,
+                                                ),
+                                                side: const BorderSide(
+                                                  color: Color(
+                                                    0xFF087FD0,
+                                                  ),
+                                                ),
+                                                shape:
+                                                    RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    10,
                                                   ),
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: OutlinedButton.icon(
-                                                  onPressed:
-                                                      (!isActive ||
-                                                              isDeleting)
-                                                          ? null
-                                                          : () =>
-                                                              deleteEmployee(
-                                                                employee,
-                                                              ),
-                                                  icon: isDeleting
-                                                      ? const SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                          ),
-                                                        )
-                                                      : const Icon(
-                                                          Icons.delete_outline,
-                                                          size: 18,
-                                                        ),
-                                                  label: Text(
-                                                    isDeleting
-                                                        ? 'กำลังดำเนินการ'
-                                                        : 'ปิดใช้งาน',
-                                                  ),
-                                                  style: OutlinedButton
-                                                      .styleFrom(
-                                                    foregroundColor:
-                                                        Colors.red,
-                                                    side: const BorderSide(
-                                                      color: Colors.red,
+                                            ),
+                                          ),
+
+                                          const SizedBox(height: 8),
+
+                                          // ปิดบัญชี - เก็บข้อมูลไว้
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              onPressed: isBusy
+                                                  ? null
+                                                  : () =>
+                                                      changeEmployeeStatus(
+                                                        employee,
+                                                        false,
+                                                      ),
+                                              icon: isBusy
+                                                  ? const SizedBox(
+                                                      width: 16,
+                                                      height: 16,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.person_off,
+                                                      size: 18,
                                                     ),
-                                                    disabledForegroundColor:
-                                                        Colors.grey,
-                                                    shape:
-                                                        RoundedRectangleBorder(
-                                                      borderRadius:
-                                                          BorderRadius
-                                                              .circular(10),
-                                                    ),
+                                              label: Text(
+                                                isBusy
+                                                    ? 'กำลังดำเนินการ'
+                                                    : 'ปิดบัญชี (เก็บข้อมูลไว้)',
+                                              ),
+                                              style: OutlinedButton
+                                                  .styleFrom(
+                                                foregroundColor:
+                                                    Colors.orange.shade800,
+                                                side: BorderSide(
+                                                  color:
+                                                      Colors.orange.shade700,
+                                                ),
+                                                shape:
+                                                    RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    10,
                                                   ),
                                                 ),
                                               ),
-                                            ],
+                                            ),
+                                          ),
+
+                                          const SizedBox(height: 8),
+
+                                          // ลบข้อมูลพนักงานจริง
+                                          SizedBox(
+                                            width: double.infinity,
+                                            child: OutlinedButton.icon(
+                                              onPressed: isBusy
+                                                  ? null
+                                                  : () =>
+                                                      deleteEmployeePermanently(
+                                                        employee,
+                                                      ),
+                                              icon: const Icon(
+                                                Icons.delete_forever,
+                                                size: 18,
+                                              ),
+                                              label: const Text(
+                                                'ลบข้อมูลพนักงานจริง',
+                                              ),
+                                              style: OutlinedButton
+                                                  .styleFrom(
+                                                foregroundColor: Colors.red,
+                                                side: const BorderSide(
+                                                  color: Colors.red,
+                                                ),
+                                                shape:
+                                                    RoundedRectangleBorder(
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                    10,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
